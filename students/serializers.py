@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import *
-from .validators import FileValidator
+from students.models import *
+from students.validators import FileValidator
 
 User = get_user_model()
 

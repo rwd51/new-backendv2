@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from .enums import StudentOnboardingSteps
+from students.enums import StudentOnboardingSteps
 import uuid
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
@@ -18,6 +18,8 @@ class CustomUser(AbstractUser):
         if hasattr(self, 'student_user'):
             return f"{self.student_user.first_name} {self.student_user.last_name}"
         return self.username or str(self.one_auth_uuid)
+
+
 class BaseModel(models.Model):
     """Base model with common fields"""
     created_at = models.DateTimeField(auto_now_add=True)
@@ -60,7 +62,8 @@ class StudentUser(BaseModel):
     date_of_birth = models.DateField(null=True, blank=True)
     gender = models.CharField(max_length=10, null=True, blank=True)
     nationality = models.CharField(max_length=100, null=True, blank=True)
-    
+    priyopay_id = models.IntegerField(null=True, blank=True)
+
     # Status fields
     is_active = models.BooleanField(default=True)
     is_approved = models.BooleanField(default=False)
@@ -146,26 +149,6 @@ class StudentPassport(BaseModel):
     passport_issue_place = models.CharField(max_length=100)  # ✅ ADD THIS
     passport_issue_date = models.DateField() 
     passport_expiry_date = models.DateField()  
-# class StudentDocument(BaseModel):
-#     """Student documents/files - matches priyo_pay_backend Documents model"""
-#     DOCUMENT_TYPES = [
-#         ('passport', 'Passport'),
-#         ('academic_transcript', 'Academic Transcript'),
-#         ('bank_statement', 'Bank Statement'),
-#         ('recommendation_letter', 'Recommendation Letter'),
-#         ('personal_statement', 'Personal Statement'),
-#         ('other', 'Other'),
-#     ]
-    
-#     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='student_documents')
-#     document_type = models.CharField(max_length=50, choices=DOCUMENT_TYPES)
-#     original_filename = models.CharField(max_length=255)
-#     file_size = models.PositiveIntegerField(null=True, blank=True)
-#     description = models.TextField(blank=True)
-    
-#     # Additional fields to match priyo_pay_backend
-#     related_resource_type = models.CharField(max_length=50, default='student')
-#     related_resource_id = models.PositiveIntegerField(null=True, blank=True)
 
 class StudentOnboardingStep(BaseModel):
     """Student onboarding progress tracking - matches priyo_pay_backend pattern"""

@@ -42,9 +42,9 @@ class JWTAuth(authentication.BaseAuthentication):
         """
         Determine if token is for student or admin based on token structure
         """
-        # Admin tokens have token_type, exp, iat, user_id, username, email
-        if 'token_type' in decoded_token and 'username' in decoded_token and 'email' in decoded_token:
-            return 'admin'
+        # Local admin tokens have token_type, exp, iat, user_id, username, email (from JWT)
+        if 'token_type' in decoded_token and 'username' in decoded_token and 'email' in decoded_token and 'user_id' in decoded_token:
+            return 'local_admin'
         # Student tokens have created_at, expired_at, id, uuid, device_type
         elif 'uuid' in decoded_token and 'created_at' in decoded_token and 'expired_at' in decoded_token:
             return 'student'
@@ -150,40 +150,24 @@ class JWTAuth(authentication.BaseAuthentication):
 
         return user
 
-    def get_or_create_admin_from_token(self, admin_details):
-        """Get or create admin user from token data"""
-        username = admin_details.get('username')
-        email = admin_details.get('email')
+    def get_or_create_local_admin_from_token(self, admin_details):
+        """Get admin user from local database"""
         user_id = admin_details.get('user_id')
+        username = admin_details.get('username')
         
-        if not username:
-            raise exceptions.AuthenticationFailed('Invalid admin token payload - missing username')
-
-        # Try to find existing admin by username
+        if not user_id:
+            raise exceptions.AuthenticationFailed('Invalid local admin token payload - missing user_id')
+            
         try:
-            user = User.objects.get(username=username)
+            # Get admin from local database
+            user = User.objects.get(id=user_id, username=username)
+            
+            if not (user.admin_type or user.is_staff):
+                raise exceptions.AuthenticationFailed('User is not an admin')
+                
+            return user
         except User.DoesNotExist:
-            # Generate mock data for admin
-            first_name, last_name, mock_email = self.generate_mock_admin_data(username)
-            
-            # Use token email if available, otherwise mock
-            final_email = email or mock_email
-            
-            # Create admin record with mock data
-            user = User.objects.create(
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                email=final_email,
-                admin_type='bank_admin',  # Default admin type
-                is_active=True,
-                is_staff=True,
-                is_superuser=False
-            )
-            
-            log.info(f"Created new admin user: {first_name} {last_name} ({final_email})")
-
-        return user
+            raise exceptions.AuthenticationFailed('Admin user not found in local database')
 
     def authenticate(self, request):
         """
@@ -201,17 +185,18 @@ class JWTAuth(authentication.BaseAuthentication):
             log.warning(f'Unknown token format: {e}')
             return None
 
-        # Check token expiration based on type
+
         current_time = timezone.now().timestamp()
-        
+
         if token_type == 'student':
             if self.has_student_token_expired(decoded_token, current_time):
                 raise exceptions.AuthenticationFailed('Student token has expired')
-        elif token_type == 'admin':
+        elif token_type == 'local_admin':
             if self.has_admin_token_expired(decoded_token, current_time):
                 raise exceptions.AuthenticationFailed('Admin token has expired')
 
         try:
+            # Get or create user based on token type
             # Get or create user based on token type
             if token_type == 'student':
                 user_details = {
@@ -221,13 +206,15 @@ class JWTAuth(authentication.BaseAuthentication):
                     'device_id': decoded_token.get('device_id')
                 }
                 user = self.get_or_create_student_from_token(user_details)
-            else:  # admin
+            elif token_type == 'local_admin':
                 user_details = {
+                    'user_id': decoded_token.get('user_id'),
                     'username': decoded_token.get('username'),
-                    'email': decoded_token.get('email'),
-                    'user_id': decoded_token.get('user_id')
+                    'email': decoded_token.get('email')
                 }
-                user = self.get_or_create_admin_from_token(user_details)
+                user = self.get_or_create_local_admin_from_token(user_details)
+            else:
+                raise exceptions.AuthenticationFailed('Unsupported token type')
             
             if not user.is_active:
                 raise exceptions.AuthenticationFailed('User is inactive')

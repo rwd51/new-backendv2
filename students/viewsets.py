@@ -3,25 +3,30 @@ from rest_framework import status
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.contrib.auth import get_user_model
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from .utility.document_helper import google_bucket_file_upload, build_file_name
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'student-portal'))
-from authentication import JWTAuth
-from permissions import IsStudent, IsBankAdmin, IsStudentAdmin
+from student_portal.authentication import JWTAuth
+from students.enums import StudentOnboardingSteps
+from students.filters import UserEducationFilterSet, UserExperienceFilterSet, StudentPrimaryInfoFilterSet, \
+    UserForeignUniversityFilterSet, UserFinancialInfoFilterSet, UserFinancerInfoFilterSet, StudentUsersFilterSet
+from students.models import StudentOnboardingStep, StudentEducation, StudentJobExperience, StudentPassport, \
+    StudentForeignUniversity, StudentFinancialInfo, StudentFinancerInfo, StudentDocument, StudentAddress, StudentUser, \
+    CustomUser
+from students.serializers import StudentOnboardingStepSerializer, StudentEducationSerializer, \
+    StudentJobExperienceSerializer, StudentPassportSerializer, StudentForeignUniversitySerializer, \
+    StudentFinancialInfoSerializer, StudentFinancerInfoSerializer, StudentDocumentSerializer, \
+    StudentDocumentUploadSerializer, StudentAddressSerializer, StudentCompleteProfileSerializer, StudentUserSerializer
+from students.utility.document_helper import google_bucket_file_upload, build_file_name
 
-from .models import *
-from .serializers import *
-from .filters import *
 
-User = get_user_model()
+from student_portal.permissions import IsStudent, IsBankAdmin, IsStudentAdmin, IsPriyoPay,IsAnyAdmin
 
-from rest_framework.decorators import action
 from rest_framework.views import APIView
+from rest_framework.decorators import action
+
 from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 # Onboarding Step Management - matches old backend pattern
 class OnboardingViewSet(APIView):
@@ -174,37 +179,57 @@ class BaseStudentViewSet(ModelViewSet):
         # Student can only see their own records
         return self.queryset.filter(user=self.request.user)
 
-# Education APIs - matches old backend /educations/
-class EducationsViewSet(BaseStudentViewSet):
+class EducationsViewSet(ModelViewSet): 
     """GET/POST/PATCH /educations/"""
     http_method_names = ['get', 'post', 'patch']
+    permission_classes = [IsStudent | IsAnyAdmin]  # ✅ OR logic
+    authentication_classes = [JWTAuth]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentEducation.objects.all()
     serializer_class = StudentEducationSerializer
     filterset_class = UserEducationFilterSet
     search_fields = ['institution_name', 'degree', 'field_of_study']
+    ordering = ['-created_at']
     
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return self.queryset.none()
         
         token_type = getattr(self.request.user, 'token_type', None)
-        user_id = self.request.query_params.get('user')  # ✅ ADD THIS
+        user_id = self.request.query_params.get('user')  # Admin can filter by user
         
-        if token_type == 'admin':
+        if token_type == 'local_admin':  # ✅ Fix: changed from 'admin' to 'local_admin'
             if user_id:
-                return self.queryset.filter(user_id=user_id)  # ✅ ADD THIS
+                return self.queryset.filter(user_id=user_id)
             return self.queryset.all()
         
         return self.queryset.filter(user=self.request.user)
 
 # Experience APIs - matches old backend /experiences/
-class ExperiencesViewSet(BaseStudentViewSet):
+class ExperiencesViewSet(ModelViewSet):  # ✅ Don't inherit from BaseStudentViewSet
     """GET/POST/PATCH /experiences/"""
     http_method_names = ['get', 'post', 'patch']
+    permission_classes = [IsStudent | IsAnyAdmin]  # ✅ OR logic
+    authentication_classes = [JWTAuth]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentJobExperience.objects.all()
     serializer_class = StudentJobExperienceSerializer
     filterset_class = UserExperienceFilterSet
     search_fields = ['company_name', 'position']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset.none()
+        
+        token_type = getattr(self.request.user, 'token_type', None)
+        
+        # Admin can see all
+        if token_type == 'local_admin':
+            return self.queryset.all()
+        
+        # Students see only their own
+        return self.queryset.filter(user=self.request.user)
 
 # Student First Step APIs - matches old backend /student-first-step/
 class StudentFirstStepViewSet(BaseStudentViewSet):
@@ -223,22 +248,55 @@ class ForeignUniversitiesViewSet(BaseStudentViewSet):
     filterset_class = UserForeignUniversityFilterSet
     search_fields = ['university_name', 'country', 'program_name']
 
-# Financial Information APIs - matches old backend /financial-info/
-class FinancialInfoViewSet(BaseStudentViewSet):
+
+class FinancialInfoViewSet(ModelViewSet):  
     """GET/POST/PATCH /financial-info/"""
     http_method_names = ['get', 'post', 'patch']
+    permission_classes = [IsStudent | IsAnyAdmin]  
+    authentication_classes = [JWTAuth]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentFinancialInfo.objects.all()
     serializer_class = StudentFinancialInfoSerializer
     filterset_class = UserFinancialInfoFilterSet
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset.none()
+        
+        token_type = getattr(self.request.user, 'token_type', None)
+        
+        # Admin can see all
+        if token_type == 'local_admin':
+            return self.queryset.all()
+        
+        # Students see only their own
+        return self.queryset.filter(user=self.request.user)
 
-# Financer APIs - matches old backend /financer-info/
-class FinancerInfoViewSet(BaseStudentViewSet):
+class FinancerInfoViewSet(ModelViewSet):  # ✅ Don't inherit from BaseStudentViewSet
     """GET/POST/PATCH /financer-info/"""
     http_method_names = ['get', 'post', 'patch']
+    permission_classes = [IsStudent | IsAnyAdmin]  # ✅ OR logic
+    authentication_classes = [JWTAuth]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentFinancerInfo.objects.all()
     serializer_class = StudentFinancerInfoSerializer
     filterset_class = UserFinancerInfoFilterSet
     search_fields = ['financer_name', 'relationship']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return self.queryset.none()
+        
+        token_type = getattr(self.request.user, 'token_type', None)
+        
+        # Admin can see all
+        if token_type == 'local_admin':
+            return self.queryset.all()
+        
+        # Students see only their own
+        return self.queryset.filter(user=self.request.user)
 
 
 class StudentDocumentsViewSet(BaseStudentViewSet):
@@ -365,13 +423,34 @@ class StudentUsersViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSe
 # Keep everything else unchanged
 
 class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
-    """GET /user/{id}/ - Complete student profile for admin - matches old backend PriyoMoneyUserViewSet"""
+    """
+    GET /user/ - Current user's own profile (Student access only) 
+    GET /user/{id}/ - Complete student profile for admin
+    GET /user/get_by_uuid/ - Get user by UUID (PriyoPay)
+    """
     http_method_names = ['get', 'patch']
-    permission_classes = [IsBankAdmin | IsStudentAdmin]
     authentication_classes = [JWTAuth]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     ordering = ['-date_joined']  # User model has date_joined, not created_at
-    
+
+    def get_permissions(self):
+        """Dynamic permissions based on action"""
+        if self.action == 'list':
+            # GET /user/ - Only students can access their own profile
+            return [IsStudent()]
+        else:
+            # All other actions - ANY admin type can access (OR logic)
+            return [IsAnyAdmin()]  # ✅ Use single combined permission
+
+    def get_authenticators(self):
+        """Skip authentication for PriyoPay requests"""
+        try:
+            if hasattr(self.request, 'user') and IsPriyoPay().has_permission(self.request, self):
+                return []
+        except:
+            pass
+        return super().get_authenticators()
+
     def get_queryset(self):
         """Get all users - admin can access any user"""
         if getattr(self, 'swagger_fake_view', False):
@@ -382,9 +461,9 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
         """Return complete profile serializer"""
         return StudentCompleteProfileSerializer
     
-    def retrieve(self, request, *args, **kwargs):
-        """Get complete student profile - matches old backend logic"""
-        user = self.get_object()
+    def list(self, request, *args, **kwargs):
+        """GET /user/ - Get current user's own profile (Student only)"""
+        user = request.user
         
         # Check if user has student profile
         try:
@@ -401,8 +480,55 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
         serializer = StudentCompleteProfileSerializer(student_user, context={'request': request})
         return Response(serializer.data)
     
+    def retrieve(self, request, *args, **kwargs):
+        """GET /user/{id}/ - Get specific user profile (Admin/PriyoPay only)"""
+        user = self.get_object()
+        
+        # Check if user has student profile
+        try:
+            student_user = user.student_user
+        except:
+            # Create minimal StudentUser if doesn't exist (auto-create pattern)
+            student_user = StudentUser.objects.create(
+                user=user,
+                first_name=user.first_name or 'Student',
+                last_name=user.last_name or f'#{user.id}',
+                email=user.email or f'student_{user.id}@temp.com',
+            )
+        
+        serializer = StudentCompleteProfileSerializer(student_user, context={'request': request})
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def get_by_uuid(self, request, *args, **kwargs):
+        """GET /user/get_by_uuid/?one_auth_uuid=xxx - Get user by UUID (PriyoPay)"""
+        uuid = request.query_params.get('one_auth_uuid')
+        if not uuid:
+            return Response({'error': 'one_auth_uuid parameter is required'}, status=400)
+            
+        try:
+            custom_user = CustomUser.objects.get(one_auth_uuid=uuid)
+            
+            # Check if user has student profile
+            try:
+                student_user = custom_user.student_user
+            except:
+                # Create minimal StudentUser if doesn't exist
+                student_user = StudentUser.objects.create(
+                    user=custom_user,
+                    first_name=custom_user.first_name or 'Student',
+                    last_name=custom_user.last_name or f'#{custom_user.id}',
+                    email=custom_user.email or f'student_{custom_user.id}@temp.com',
+                )
+            
+            serializer = StudentCompleteProfileSerializer(student_user, context={'request': request})
+            return Response(serializer.data)
+            
+        except CustomUser.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
     def update(self, request, *args, **kwargs):
-        """Update student profile - admin only"""
+        """PATCH /user/{id}/ - Update student profile (Admin/PriyoPay only)"""
         user = self.get_object()
         
         try:
@@ -422,10 +548,26 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
         return Response(serializer.data)
 
 # Address Management for Admin
-class UserAddressViewSet(BaseStudentViewSet):
-    """GET/PATCH /user-address/ - Address management"""
+class UserAddressViewSet(ModelViewSet):
+    """GET/POST/PATCH /user-address/ - Address management"""
     http_method_names = ['get', 'post', 'patch']
-    permission_classes = [IsStudent| IsBankAdmin | IsStudentAdmin]
+    permission_classes = [IsStudent | IsAnyAdmin]  # Default for all actions
+    authentication_classes = [JWTAuth]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentAddress.objects.all()
     serializer_class = StudentAddressSerializer
     filterset_fields = ['address_type', 'user']
+    
+    def get_queryset(self):
+        """Filter queryset based on user type"""
+        if getattr(self, 'swagger_fake_view', False):
+            return StudentAddress.objects.none()
+        
+        token_type = getattr(self.request.user, 'token_type', None)
+        
+        # Admin can see all addresses
+        if token_type == 'local_admin':
+            return StudentAddress.objects.all()
+        
+        # Students can only see their own addresses
+        return StudentAddress.objects.filter(user=self.request.user)

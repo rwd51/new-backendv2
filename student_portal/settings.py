@@ -1,5 +1,5 @@
 """
-Django settings for student-portal project.
+Django settings for student_portal project.
 """
 
 from pathlib import Path
@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',  
+    'rest_framework_simplejwt.token_blacklist',  
     'corsheaders',
     'django_filters',  # FIXED: Separate line
     'drf_yasg',        # FIXED: Separate line
@@ -56,13 +58,13 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+   ## 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'student-portal.urls'
+ROOT_URLCONF = 'student_portal.urls'
 
 TEMPLATES = [
     {
@@ -80,7 +82,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'student-portal.wsgi.application'
+WSGI_APPLICATION = 'student_portal.wsgi.application'
 
 # Database
 DATABASES = {
@@ -100,8 +102,8 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'student-portal.authentication.JWTAuth',
-        'student-portal.authentication.NoAuth',
+        'student_portal.authentication.JWTAuth',
+        'student_portal.authentication.NoAuth',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -142,7 +144,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME')
+GS_BUCKET_NAME = os.getenv('GS_BUCKET_NAME', 'priyo_pay_dev_docs')
 GS_BUCKET_CREDENTIAL = os.getenv('GS_BUCKET_CREDENTIAL', 'priyo-pay-bucket.json')
 GS_BUCKET_FILE_NAME_MAX_CHAR = 172
 
@@ -207,6 +209,41 @@ JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-secret-key')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRATION_DELTA = int(os.environ.get('JWT_EXPIRATION_DELTA', '86400'))
 
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 1 hour
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 1 week
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'VERIFYING_KEY': None,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'TOKEN_TYPE_CLAIM': 'token_type',
+    'JTI_CLAIM': 'jti',
+    'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
+    'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
+    'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
+}
+# Add these at the end of settings.py
+AUTH_API_BASE = os.getenv('AUTH_API_BASE', 'https://test-accounts.priyo.com')
+AUTH_API_KEY = os.getenv('AUTH_API_KEY', 'your-auth-api-key')
+
+PRIYOPAY_API_URL = os.getenv('PRIYOPAY_API_URL')
+PRIYOPAY_API_KEY = os.getenv('PRIYOPAY_API_KEY')
+
+# Make sure you have cache configured
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
+    }
+}
+# Profile caching (like old backend)
+PROFILE_CACHE_PREFIX = "profile-"
+PROFILE_CACHE_TTL = int(os.getenv('PROFILE_CACHE_TTL', 300))  # 5 minutes
+
 # Swagger Configuration
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
@@ -236,3 +273,4 @@ SWAGGER_SETTINGS = {
     'SHOW_EXTENSIONS': True,
     'SHOW_COMMON_EXTENSIONS': True,
 }
+

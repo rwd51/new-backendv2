@@ -6,6 +6,9 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
 
+# Import admin auth views
+from .admin_auth import admin_register, admin_login, admin_logout, AdminTokenRefreshView
+
 # Swagger Configuration
 schema_view = get_schema_view(
     openapi.Info(
@@ -24,9 +27,16 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
+    # ✅ PUT CUSTOM ADMIN ENDPOINTS FIRST (before Django admin)
+    path('admin/register/', admin_register, name='admin_register'),
+    path('admin/login/', admin_login, name='admin_login'),
+    path('admin/login/refresh/', AdminTokenRefreshView.as_view(), name='admin_token_refresh'),
+    path('admin/logout/', admin_logout, name='admin_logout'),
+    
+    # ✅ Django admin AFTER your custom endpoints
     path('admin/', admin.site.urls),
     
-    # API Routes - students URLs will be directly accessible
+    # API Routes
     path('', include('students.urls')),
     
     # Swagger Documentation
