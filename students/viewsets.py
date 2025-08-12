@@ -410,7 +410,13 @@ class StudentUsersViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSe
             return User.objects.none()
         
         # Get users who have StudentUser records (similar to student_primary_info in old backend)
-        return User.objects.filter(student_user__isnull=False)
+        return User.objects.filter(
+        student_user__isnull=False
+        ).exclude(
+            admin_type__isnull=False  # Exclude users with admin_type set
+        ).exclude(
+            admin_user__isnull=False  # Exclude users with AdminUser records
+        )
     
     def get_serializer_context(self):
         """Add profile image context like old backend"""

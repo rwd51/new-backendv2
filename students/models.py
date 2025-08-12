@@ -123,13 +123,24 @@ class StudentForeignUniversity(BaseModel):
 
 class StudentFinancialInfo(BaseModel):
     """Student financial information - matches priyo_pay_backend naming"""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='student_financial_info') 
-    monthly_income_usd = models.DecimalField(max_digits=12, decimal_places=2)
-    yearly_income_usd = models.DecimalField(max_digits=12, decimal_places=2)
-    savings_usd = models.DecimalField(max_digits=12, decimal_places=2)
-    family_contribution_usd = models.DecimalField(max_digits=12, decimal_places=2)
-    loan_required_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='student_financial_info')
+    
+    # Existing fields (keep as is)
+    annual_family_income = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    savings_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    loan_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    other_funding_sources = models.TextField(blank=True)
     bank_statement_available = models.BooleanField(default=False)
+    
+    # ADD THESE MISSING FIELDS for frontend compatibility:
+    foreign_currency_purchase_date = models.DateField(blank=True, null=True)
+    purchased_currency_amount_in_cent = models.IntegerField(default=0, blank=True, null=True)
+    scholarship_title = models.CharField(max_length=255, blank=True, null=True)
+    scholarship_amount_in_cent = models.IntegerField(default=0, blank=True, null=True)
+    scholarship_period = models.CharField(max_length=255, blank=True, null=True)
+    estimated_income_in_cent_from_part_time_per_month = models.IntegerField(default=0, blank=True, null=True)
+    remittance_by_other_channels = models.TextField(blank=True, null=True)
+    willing_to_return_to_bd = models.BooleanField(default=False)
 
 class StudentFinancerInfo(BaseModel):
     """Student financer information - matches priyo_pay_backend naming"""

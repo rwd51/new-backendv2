@@ -1,7 +1,7 @@
 from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
-from students.views import DepositClaimsView
+from students.views import DepositClaimsView, BDTtoUSDView
 from students.viewsets import *
 
 router = DefaultRouter()
@@ -26,5 +26,7 @@ urlpatterns = [
     # IMPORTANT: Progress endpoint must come BEFORE the step endpoint to avoid conflicts
     path('onboarding/progress/', OnboardingProgressViewSet.as_view(), name='onboarding_progress'),
     path('deposits/', DepositClaimsView.as_view(), name='deposits'),
+    path('conversions/', BDTtoUSDView.as_view(), name='conversions'),
+
     re_path(r'^onboarding/(?P<step>[\w-]+)/$', OnboardingViewSet.as_view(), name='onboarding_step'),
 ]

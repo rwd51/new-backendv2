@@ -101,16 +101,33 @@ class StudentForeignUniversitySerializer(StudentUserAutoCreateMixin, serializers
         return super().create(validated_data)
 
 class StudentFinancialInfoSerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
+    # Add USD conversion fields for frontend compatibility
+    scholarship_amount_in_usd = serializers.SerializerMethodField()
+    estimated_income_in_usd_from_part_time_per_month = serializers.SerializerMethodField()
+    purchased_currency_amount_in_usd = serializers.SerializerMethodField()
+    
     class Meta:
         model = StudentFinancialInfo
         fields = '__all__'
         read_only_fields = ('user', 'created_at', 'updated_at')
     
-    def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)
-        validated_data['user'] = user
-        return super().create(validated_data)
+    def get_scholarship_amount_in_usd(self, obj):
+        """Convert cents to USD for frontend"""
+        if obj.scholarship_amount_in_cent:
+            return f"{obj.scholarship_amount_in_cent / 100:.2f}"
+        return "0.00"
+    
+    def get_estimated_income_in_usd_from_part_time_per_month(self, obj):
+        """Convert cents to USD for frontend"""
+        if obj.estimated_income_in_cent_from_part_time_per_month:
+            return f"{obj.estimated_income_in_cent_from_part_time_per_month / 100:.2f}"
+        return "0.00"
+    
+    def get_purchased_currency_amount_in_usd(self, obj):
+        """Convert cents to USD for frontend"""
+        if obj.purchased_currency_amount_in_cent:
+            return f"{obj.purchased_currency_amount_in_cent / 100:.2f}"
+        return "0.00"
 
 class StudentFinancerInfoSerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
     class Meta:
@@ -426,3 +443,13 @@ class StudentAddressSerializer(StudentUserAutoCreateMixin, serializers.ModelSeri
         model = StudentAddress
         fields = '__all__'
         read_only_fields = ('user', 'created_at', 'updated_at')
+
+
+
+
+class DepositClaimApproveSerializer(serializers.Serializer):
+    claim_id = serializers.CharField(required=True, max_length=255)
+
+
+class ConversionApproveSerializer(serializers.Serializer):
+    conversion_id = serializers.CharField(required=True, max_length=255)
