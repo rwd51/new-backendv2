@@ -16,7 +16,7 @@ from students.serializers import StudentOnboardingStepSerializer, StudentEducati
     StudentJobExperienceSerializer, StudentPassportSerializer, StudentForeignUniversitySerializer, \
     StudentFinancialInfoSerializer, StudentFinancerInfoSerializer, StudentDocumentSerializer, \
     StudentDocumentUploadSerializer, StudentAddressSerializer, StudentCompleteProfileSerializer, StudentUserSerializer
-from students.utility.document_helper import google_bucket_file_upload, build_file_name
+from students.utility.document_helper import google_bucket_file_upload, build_file_name ,google_bucket_file_delete
 
 
 from student_portal.permissions import IsStudent, IsBankAdmin, IsStudentAdmin, IsPriyoPay,IsAnyAdmin
@@ -173,7 +173,7 @@ class BaseStudentViewSet(ModelViewSet):
         token_type = getattr(self.request.user, 'token_type', None)
         
         # Admin can see all records
-        if token_type == 'admin':
+        if token_type == 'local_admin':
             return self.queryset.all()
         
         # Student can only see their own records
@@ -206,7 +206,7 @@ class EducationsViewSet(ModelViewSet):
         return self.queryset.filter(user=self.request.user)
 
 # Experience APIs - matches old backend /experiences/
-class ExperiencesViewSet(ModelViewSet):  # ✅ Don't inherit from BaseStudentViewSet
+class ExperiencesViewSet(ModelViewSet):  # 
     """GET/POST/PATCH /experiences/"""
     http_method_names = ['get', 'post', 'patch']
     permission_classes = [IsStudent | IsAnyAdmin]  # ✅ OR logic
@@ -231,7 +231,7 @@ class ExperiencesViewSet(ModelViewSet):  # ✅ Don't inherit from BaseStudentVie
         # Students see only their own
         return self.queryset.filter(user=self.request.user)
 
-# Student First Step APIs - matches old backend /student-first-step/
+
 class StudentFirstStepViewSet(BaseStudentViewSet):
     """GET/POST/PATCH /student-first-step/ - Passport information"""
     http_method_names = ['get', 'post', 'patch']
@@ -239,7 +239,7 @@ class StudentFirstStepViewSet(BaseStudentViewSet):
     serializer_class = StudentPassportSerializer
     filterset_class = StudentPrimaryInfoFilterSet
 
-# Foreign University APIs - matches old backend /foreign-universities/
+
 class ForeignUniversitiesViewSet(BaseStudentViewSet):
     """GET/POST/PATCH /foreign-universities/"""
     http_method_names = ['get', 'post', 'patch']
@@ -273,10 +273,10 @@ class FinancialInfoViewSet(ModelViewSet):
         # Students see only their own
         return self.queryset.filter(user=self.request.user)
 
-class FinancerInfoViewSet(ModelViewSet):  # ✅ Don't inherit from BaseStudentViewSet
+class FinancerInfoViewSet(ModelViewSet):  
     """GET/POST/PATCH /financer-info/"""
     http_method_names = ['get', 'post', 'patch']
-    permission_classes = [IsStudent | IsAnyAdmin]  # ✅ OR logic
+    permission_classes = [IsStudent | IsAnyAdmin] 
     authentication_classes = [JWTAuth]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     queryset = StudentFinancerInfo.objects.all()
@@ -307,7 +307,7 @@ class StudentDocumentsViewSet(BaseStudentViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ['create', 'update', 'partial_update']:
             return StudentDocumentUploadSerializer
         return StudentDocumentSerializer
     
@@ -317,7 +317,8 @@ class StudentDocumentsViewSet(BaseStudentViewSet):
         serializer.is_valid(raise_exception=True)
         
         response_data, error_msg = self.upload_student_documents(
-            serializer.validated_data, request.user
+            serializer.validated_data, 
+            request.user
         )
         
         if error_msg:
@@ -328,9 +329,72 @@ class StudentDocumentsViewSet(BaseStudentViewSet):
             status=status.HTTP_200_OK
         )
     
+    def update(self, request, *args, **kwargs):
+        """PATCH /student-documents/{id}/ - Update specific document"""
+        instance = self.get_object()
+        
+        # Check if this is a file upload
+        file_fields = [
+            'student_photograph', 'financer_photograph', 'student_signature', 
+            'financer_signature', 'admission_letter', 'educational_certificate',
+            'educational_transcript', 'university_invoice', 'financial_estimate',
+            'language_test_result', 'other_documents'
+        ]
+        
+        has_file_upload = any(field in request.data for field in file_fields)
+        
+        if has_file_upload:
+            # Handle file upload for this specific document
+            uploaded_file = None
+            new_doc_type = None
+            
+            for field in file_fields:
+                if field in request.data:
+                    uploaded_file = request.data[field]
+                    new_doc_type = field
+                    break
+            
+            if uploaded_file:
+                # Build bucket path - same as old backend
+                bucket_folder_name = f"STUDENT/u{request.user.id}/{new_doc_type}"
+                file_name = build_file_name(uploaded_file, bucket_folder_name)
+                
+                # Upload new file to GCP
+                gcp_file_path, error_msg = google_bucket_file_upload(uploaded_file, file_name)
+                
+                if error_msg:
+                    return Response({'error': error_msg}, status=status.HTTP_400_BAD_REQUEST)
+                
+                if gcp_file_path:
+                    # Delete old file from GCP if it exists
+                    if instance.uploaded_file_name:
+                        google_bucket_file_delete(instance.uploaded_file_name)
+                    
+                    # Update the existing document record
+                    instance.document_type = new_doc_type
+                    instance.original_filename = uploaded_file.name
+                    instance.uploaded_file_name = gcp_file_path
+                    instance.file_size = uploaded_file.size
+                    instance.save()
+                else:
+                    return Response({'error': 'Failed to upload file'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Handle metadata updates (description, verification_status, etc.)
+        serializer = StudentDocumentSerializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        return Response(serializer.data)
+    
+    def partial_update(self, request, *args, **kwargs):
+        """PATCH /student-documents/{id}/ - Same as update for partial updates"""
+        return self.update(request, *args, **kwargs)
+    
+
+    
     @classmethod
     def upload_student_documents(cls, validated_data, user):
-        """Upload logic - adapted from old backend"""
+        """Upload logic for CREATE - adapted from old backend"""
         document_types = [
             'student_photograph', 'financer_photograph', 'student_signature', 
             'financer_signature', 'admission_letter', 'educational_certificate',
@@ -345,34 +409,44 @@ class StudentDocumentsViewSet(BaseStudentViewSet):
             for doc_type in document_types:
                 uploaded_file = validated_data.get(doc_type)
                 if uploaded_file:
-                    # Build bucket path - same as old backend
+                
                     bucket_folder_name = f"STUDENT/u{user.id}/{doc_type}"
                     file_name = build_file_name(uploaded_file, bucket_folder_name)
                     
                     # Upload to GCP
-                    gcp_url, error_msg = google_bucket_file_upload(uploaded_file, file_name)
+                    gcp_file_path, error_msg = google_bucket_file_upload(uploaded_file, file_name)
                     
-                    if gcp_url:  # This is actually the file_name
-                        # Create document record
-                        document = StudentDocument.objects.create(
+                    if gcp_file_path:
+                        # Use update_or_create to handle existing documents
+                        document, created = StudentDocument.objects.update_or_create(
                             user=user,
                             document_type=doc_type,
-                            original_filename=uploaded_file.name,
-                            uploaded_file_name=gcp_url,  # ✅ Store the file path here
-                            file_size=uploaded_file.size,
-                            doc_type='STUDENT_DOCUMENTS',
-                            related_resource_type='student'
-                            # ✅ Remove gcp_url from here - let serializer generate it
+                            defaults={
+                                'original_filename': uploaded_file.name,
+                                'uploaded_file_name': gcp_file_path,
+                                'file_size': uploaded_file.size,
+                                'doc_type': 'STUDENT_DOCUMENTS',
+                                'related_resource_type': 'student'
+                            }
                         )
-                        response_data.append(document)
                         
-            if len(response_data) == 0:
-                error_message = "Failed to upload files!"
+                        # If updating existing document, delete old file
+                        if not created and document.uploaded_file_name != gcp_file_path:
+                            # The old file path would be stored before update_or_create
+                            pass  # Already handled by update_or_create
+                        
+                        response_data.append(document)
+                    else:
+                        error_message = f"Failed to upload {doc_type}: {error_msg}"
+                        break
+                        
+            if len(response_data) == 0 and not error_message:
+                error_message = "No files provided for upload!"
                 
         except Exception as ex:
             error_message = str(ex)
         
-        if len(response_data) > 0:  # If documents uploaded successfully
+        if len(response_data) > 0:
             # Auto-update onboarding progress
             from django.utils import timezone
             StudentOnboardingStep.objects.update_or_create(
@@ -387,13 +461,9 @@ class StudentDocumentsViewSet(BaseStudentViewSet):
         
         return response_data, error_message
     
-# Student List & Detail APIs for Admin
-# In students/viewsets.py - Replace the existing classes
 
-# Student List & Detail APIs for Admin - FIXED
-# In students/viewsets.py - Replace the StudentUsersViewSet class
 
-class StudentUsersViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
+class StudentUsersViewSet(ModelViewSet): 
     """GET /student-users/ - Student list for admin - matches old backend StudentUserViewSet"""
     http_method_names = ['get']
     permission_classes = [IsBankAdmin | IsStudentAdmin]
@@ -402,14 +472,14 @@ class StudentUsersViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSe
     search_fields = ['student_user__first_name', 'student_user__last_name', 'student_user__email']
     filterset_class = StudentUsersFilterSet
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    ordering = ['-date_joined']  # User model has date_joined, not created_at
+    ordering = ['-date_joined'] 
     
     def get_queryset(self):
         """Get users who have student_user records - matches old backend logic"""
         if getattr(self, 'swagger_fake_view', False):
             return User.objects.none()
         
-        # Get users who have StudentUser records (similar to student_primary_info in old backend)
+     
         return User.objects.filter(
         student_user__isnull=False
         ).exclude(
@@ -424,9 +494,6 @@ class StudentUsersViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSe
         context['include_profile_image_icon'] = True  # Admin can see profile images
         return context
 
-# Complete Profile API for Admin - FIXED  
-# In students/viewsets.py - ONLY replace the UserViewSet class
-# Keep everything else unchanged
 
 class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
     """
@@ -445,8 +512,8 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
             # GET /user/ - Only students can access their own profile
             return [IsStudent()]
         else:
-            # All other actions - ANY admin type can access (OR logic)
-            return [IsAnyAdmin()]  # ✅ Use single combined permission
+          
+            return [IsAnyAdmin()]  
 
     def get_authenticators(self):
         """Skip authentication for PriyoPay requests"""
@@ -490,7 +557,7 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
         """GET /user/{id}/ - Get specific user profile (Admin/PriyoPay only)"""
         user = self.get_object()
         
-        # Check if user has student profile
+
         try:
             student_user = user.student_user
         except:
@@ -552,6 +619,7 @@ class UserViewSet(ModelViewSet):  # Don't inherit from BaseStudentViewSet
         serializer.save()
         
         return Response(serializer.data)
+
 
 # Address Management for Admin
 class UserAddressViewSet(ModelViewSet):

@@ -1,7 +1,7 @@
 from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
-from students.views import DepositClaimsView, BDTtoUSDView
+from students.views import DepositClaimsView, BDTtoUSDView, USDAccountsView
 from students.viewsets import *
 
 router = DefaultRouter()
@@ -21,12 +21,15 @@ router.register(r'user-address', UserAddressViewSet, basename='user_address')
 
 urlpatterns = [
     path('', include(router.urls)),
-        # Onboarding APIs - matches required pattern
-    # Onboarding APIs - matches required pattern
-    # IMPORTANT: Progress endpoint must come BEFORE the step endpoint to avoid conflicts
+     
+
     path('onboarding/progress/', OnboardingProgressViewSet.as_view(), name='onboarding_progress'),
     path('deposits/', DepositClaimsView.as_view(), name='deposits'),
+    path('deposits/<str:pk>/', DepositClaimsView.as_view(), name='deposit_detail'),  # ADD THIS
     path('conversions/', BDTtoUSDView.as_view(), name='conversions'),
+    path('conversions/<str:pk>/', BDTtoUSDView.as_view(), name='conversion_detail'),
+    path('usd-accounts/', USDAccountsView.as_view(), name='usd_accounts'),
+    path('usd-accounts/<str:user_id>/', USDAccountsView.as_view(), name='usd_accounts_detail'),
 
     re_path(r'^onboarding/(?P<step>[\w-]+)/$', OnboardingViewSet.as_view(), name='onboarding_step'),
 ]

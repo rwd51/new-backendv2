@@ -1,11 +1,15 @@
+# student_portal/authentication.py
+
 import logging
 import jwt
-import random
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import authentication, exceptions
 from rest_framework.exceptions import AuthenticationFailed
+
+# Import our new auth client
+from api_clients.auth_client import auth_client
 
 User = get_user_model()
 log = logging.getLogger(__name__)
@@ -13,6 +17,7 @@ log = logging.getLogger(__name__)
 class JWTAuth(authentication.BaseAuthentication):
     """
     JWT authentication that handles both student and admin tokens
+    Now with proper auth service integration for student users
     """
 
     @staticmethod
@@ -49,66 +54,31 @@ class JWTAuth(authentication.BaseAuthentication):
         elif 'uuid' in decoded_token and 'created_at' in decoded_token and 'expired_at' in decoded_token:
             return 'student'
         else:
-            raise exceptions.AuthenticationFailed('Unknown token format')
+            raise exceptions.AuthenticationFailed('Unknown token type')
 
     @staticmethod
-    def has_student_token_expired(token, current_time):
-        """
-        Check if student token has expired
-        """
-        created_at = token.get('created_at')
-        expired_at = token.get('expired_at')
-        
-        if not created_at or not expired_at:
+    def has_student_token_expired(decoded_token, current_time):
+        """Check if student token has expired"""
+        expired_at = decoded_token.get('expired_at')
+        if expired_at and current_time > expired_at:
             return True
-        
-        return not (created_at <= current_time < expired_at)
+        return False
 
     @staticmethod
-    def has_admin_token_expired(token, current_time):
-        """
-        Check if admin token has expired
-        """
-        exp = token.get('exp')
-        if not exp:
+    def has_admin_token_expired(decoded_token, current_time):
+        """Check if admin token has expired"""
+        exp = decoded_token.get('exp')
+        if exp and current_time > exp:
             return True
-        
-        return current_time >= exp
+        return False
 
-    @staticmethod
-    def generate_mock_student_data(student_id, uuid):
-        """Generate consistent mock data for students"""
-        # Use student_id for consistent names
-        student_num = student_id or (hash(str(uuid)) % 9999)
-        
-        first_names = ['Tom', 'Sarah', 'John', 'Emma', 'Mike', 'Lisa', 'David', 'Anna']
-        last_names = ['Khan', 'Rahman', 'Ahmed', 'Hossain', 'Islam', 'Begum', 'Ali', 'Sheikh']
-        
-        # Use hash for consistent selection
-        random.seed(hash(str(uuid)))
-        first_name = f"{random.choice(first_names)}{student_num}"
-        last_name = random.choice(last_names)
-        email = f"student_{student_num}@yopmail.com"
-        
-        return first_name, last_name, email
 
-    @staticmethod
-    def generate_mock_admin_data(username):
-        """Generate consistent mock data for admins"""
-        admin_first_names = ['Admin', 'Manager', 'Director', 'Chief']
-        admin_last_names = ['Operations', 'Review', 'Support', 'Control']
-        
-        # Use username hash for consistency
-        hash_val = abs(hash(username)) % 1000
-        random.seed(hash(username))
-        first_name = f"{random.choice(admin_first_names)}{hash_val}"
-        last_name = random.choice(admin_last_names)
-        email = f"{username}@adminportal.yopmail.com"
-        
-        return first_name, last_name, email
 
-    def get_or_create_student_from_token(self, student_details):
-        """Get or create student user from token data"""
+    def get_or_create_student_from_token(self, student_details, jwt_token):
+        """
+        Get or create student user from token data
+        Uses auth service to fetch real user details
+        """
         uuid = student_details.get('uuid')
         student_id = student_details.get('id')
         
@@ -118,37 +88,57 @@ class JWTAuth(authentication.BaseAuthentication):
         # Try to find existing user by one_auth_uuid
         try:
             user = User.objects.get(one_auth_uuid=uuid)
+            log.info(f"Found existing student user: {user.id}")
+            return user
         except User.DoesNotExist:
-            # Generate mock data
-            first_name, last_name, email = self.generate_mock_student_data(student_id, uuid)
+            log.info(f"Creating new student user for UUID: {uuid}")
             
-            # Create user record with mock data
+            # Fetch user details from auth service
+            profile_data = auth_client.get_user_profile(jwt_token)
+            
+            if not profile_data:
+                raise exceptions.AuthenticationFailed('Failed to fetch user profile from auth service')
+            
+            # Extract user details from auth service response
+            user_details = auth_client.extract_user_details(profile_data)
+            
+            if not user_details:
+                raise exceptions.AuthenticationFailed('Failed to extract user details from auth service response')
+            
+            log.info(f"Successfully fetched user details from auth service for user ID: {user_details.get('auth_user_id')}")
+            
+            # Create user with real data from auth service
             user = User.objects.create(
                 username=str(uuid)[:30],  # Truncate for Django compatibility
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
+                first_name=user_details.get('first_name', 'User'),
+                last_name=user_details.get('last_name', f'User{student_id}'),
+                email=user_details.get('email', f'user{student_id}@example.com'),
                 one_auth_uuid=uuid,
-                is_active=True,
+                is_active=user_details.get('is_active', True),
                 is_staff=False,
                 is_superuser=False
             )
             
-            # Auto-create StudentUser with better mock data
+            # Auto-create StudentUser with real data from auth service (only actual model fields)
             from students.models import StudentUser
             StudentUser.objects.create(
                 user=user,
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-                mobile_number=f"+880171234{student_id or abs(hash(str(uuid))) % 10000}",
-                nationality="Bangladesh",
-                is_active=True
+                first_name=user_details.get('first_name', 'User'),
+                last_name=user_details.get('last_name', f'User{student_id}'),
+                email=user_details.get('email', f'user{student_id}@example.com'),
+                mobile_number=user_details.get('mobile'),  # This can be None, model allows it
+                date_of_birth=user_details.get('dob'),  # This can be None, model allows it  
+                gender=user_details.get('gender'),  # This can be None, model allows it
+                nationality=user_details.get('nationality'),  # This can be None, model allows it
+                priyopay_id=None,  # Will be set later when needed
+                is_active=True,
+                is_approved=False,  # New users start unapproved
+                approved_by=None,
+                approved_at=None,
             )
             
-            log.info(f"Created new student user: {first_name} {last_name} ({email})")
-
-        return user
+            log.info(f"Created new student user with real data: {user_details.get('first_name')} {user_details.get('last_name')} ({user_details.get('email')})")
+            return user
 
     def get_or_create_local_admin_from_token(self, admin_details):
         """Get admin user from local database"""
@@ -185,7 +175,6 @@ class JWTAuth(authentication.BaseAuthentication):
             log.warning(f'Unknown token format: {e}')
             return None
 
-
         current_time = timezone.now().timestamp()
 
         if token_type == 'student':
@@ -197,7 +186,6 @@ class JWTAuth(authentication.BaseAuthentication):
 
         try:
             # Get or create user based on token type
-            # Get or create user based on token type
             if token_type == 'student':
                 user_details = {
                     'uuid': decoded_token.get('uuid'),
@@ -205,7 +193,8 @@ class JWTAuth(authentication.BaseAuthentication):
                     'device_type': decoded_token.get('device_type'),
                     'device_id': decoded_token.get('device_id')
                 }
-                user = self.get_or_create_student_from_token(user_details)
+                # Pass the original JWT token to fetch from auth service
+                user = self.get_or_create_student_from_token(user_details, token)
             elif token_type == 'local_admin':
                 user_details = {
                     'user_id': decoded_token.get('user_id'),
@@ -228,6 +217,7 @@ class JWTAuth(authentication.BaseAuthentication):
         except Exception as ex:
             log.error(f'Authentication failed: {ex}', exc_info=True)
             raise exceptions.AuthenticationFailed(f'User authentication failed: {ex}')
+
 
 class NoAuth(authentication.BaseAuthentication):
     """

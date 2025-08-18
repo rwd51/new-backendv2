@@ -115,7 +115,12 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '').split(',')
+cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if cors_origins:
+    CORS_ALLOWED_ORIGINS = cors_origins.split(',')
+else:
+    CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
+
 CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
 
 # Password validation
@@ -226,21 +231,23 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=60),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
-# Add these at the end of settings.py
-AUTH_API_BASE = os.getenv('AUTH_API_BASE', 'https://test-accounts.priyo.com')
-AUTH_API_KEY = os.getenv('AUTH_API_KEY', 'your-auth-api-key')
+AUTH_API_BASE = os.getenv('AUTH_API_BASE')
+AUTH_API_KEY = os.getenv('AUTH_API_KEY')
+
+if not AUTH_API_BASE or not AUTH_API_KEY:
+    raise ValueError("AUTH_API_BASE and AUTH_API_KEY must be set in environment variables")
 
 PRIYOPAY_API_URL = os.getenv('PRIYOPAY_API_URL')
 PRIYOPAY_API_KEY = os.getenv('PRIYOPAY_API_KEY')
 
-# Make sure you have cache configured
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "unique-snowflake",
     }
 }
-# Profile caching (like old backend)
+# Profile caching ( I wish to implement caching later on )
 PROFILE_CACHE_PREFIX = "profile-"
 PROFILE_CACHE_TTL = int(os.getenv('PROFILE_CACHE_TTL', 300))  # 5 minutes
 

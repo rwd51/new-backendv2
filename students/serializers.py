@@ -153,7 +153,7 @@ class StudentFinancerInfoSerializer(StudentUserAutoCreateMixin, serializers.Mode
 
 class StudentUserSerializer(serializers.ModelSerializer):
     """Matches old backend StudentUserSerializer response format"""
-    
+    user = serializers.IntegerField(source='id', read_only=True)
     # Add fields that match old backend PriyoMoneyUserSerializer
     university = serializers.SerializerMethodField()
     department = serializers.SerializerMethodField()
@@ -163,7 +163,7 @@ class StudentUserSerializer(serializers.ModelSerializer):
     last_onboarding_step = serializers.SerializerMethodField()
     
     # Basic user info from CustomUser model - FIXED: use proper sources
-    id = serializers.IntegerField(source='student_user.id', read_only=True)
+    id = serializers.IntegerField(source='student_r.id', read_only=True)
     first_name = serializers.CharField(source='student_user.first_name', read_only=True)
     last_name = serializers.CharField(source='student_user.last_name', read_only=True)
     email = serializers.CharField(source='student_user.email', read_only=True)
@@ -179,7 +179,7 @@ class StudentUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User  # Changed to User model since that's what the viewset returns
         fields = [
-            'id', 'one_auth_uuid', 'first_name', 'last_name', 'email', 
+            'id','user', 'one_auth_uuid', 'first_name', 'last_name', 'email', 
             'mobile_number', 'date_of_birth', 'gender', 'nationality',
             'is_active', 'is_approved', 
             'university', 'department', 'foreign_university', 'profile_image_icon', 
@@ -453,3 +453,15 @@ class DepositClaimApproveSerializer(serializers.Serializer):
 
 class ConversionApproveSerializer(serializers.Serializer):
     conversion_id = serializers.CharField(required=True, max_length=255)
+
+
+class ConversionCreateSerializer(serializers.Serializer):
+    amount_in_bdt = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
+    amount_in_cent = serializers.IntegerField(required=True)
+    expense_type = serializers.ChoiceField(
+        choices=['LIVING_EXPENSE', 'TUITION_FEE', 'OTHER'], 
+        required=True
+    )
+    usd_account = serializers.CharField(max_length=255, required=True)
+    conversion_rate = serializers.FloatField(required=True)
+    expense_document = serializers.FileField(required=True)

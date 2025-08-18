@@ -65,7 +65,7 @@ class StudentUser(BaseModel):
     priyopay_id = models.IntegerField(null=True, blank=True)
 
     # Status fields
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=False)
     is_approved = models.BooleanField(default=False)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name='approved_students')
     approved_at = models.DateTimeField(null=True, blank=True)
@@ -141,6 +141,9 @@ class StudentFinancialInfo(BaseModel):
     estimated_income_in_cent_from_part_time_per_month = models.IntegerField(default=0, blank=True, null=True)
     remittance_by_other_channels = models.TextField(blank=True, null=True)
     willing_to_return_to_bd = models.BooleanField(default=False)
+    
+    # New field for Student File Bank Name
+    student_file_bank_name = models.CharField(max_length=255, blank=True, null=True)
 
 class StudentFinancerInfo(BaseModel):
     """Student financer information - matches priyo_pay_backend naming"""

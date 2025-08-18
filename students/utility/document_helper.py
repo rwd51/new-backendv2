@@ -30,9 +30,9 @@ def google_bucket_file_url(file_name):
         return cached_val
     try:
         ret = GoogleCloudStorage().url(file_name)
-        print(f"GCP URL generated: {ret}")  # ✅ ADD THIS DEBUG LINE
+        print(f"GCP URL generated: {ret}")  
     except Exception as ex:
-        print(f"GCP URL error: {ex}")  # ✅ ADD THIS DEBUG LINE
+        print(f"GCP URL error: {ex}")  
         logger.error(str(ex), exc_info=True)
         ret = None
     cache.set(cache_key, ret, timeout=settings.GS_EXPIRATION.total_seconds())

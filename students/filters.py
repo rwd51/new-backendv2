@@ -1,7 +1,7 @@
 from django_filters.rest_framework import FilterSet
 from .models import *
 
-# Add this to students/filters.py
+
 
 from django_filters.rest_framework import FilterSet, BooleanFilter, CharFilter
 from django.contrib.auth import get_user_model
