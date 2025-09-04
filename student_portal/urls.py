@@ -14,15 +14,17 @@ schema_view = get_schema_view(
     openapi.Info(
         title="Student Backend API",
         default_version='v1',
-        description="Student Management Microservice API",
-        terms_of_service="https://www.yourcompany.com/terms/",
-        contact=openapi.Contact(email="admin@yourcompany.com"),
+        description="Student Management Micro-service API",
+        terms_of_service="https://www.priyo.com/terms/",
+        contact=openapi.Contact(email="admin@priyo.com"),
         license=openapi.License(name="BSD License"),
     ),
     public=True,
-    permission_classes=(permissions.AllowAny,),
+    permission_classes=[permissions.AllowAny,],
     patterns=[
         path('', include('students.urls')),
+        path('', include('bank_admin.urls')),
+        path('', include('student_admin.urls')),
     ],
 )
 
@@ -38,7 +40,10 @@ urlpatterns = [
     
     # API Routes
     path('', include('students.urls')),
-    
+    path('health/', include('health.urls')),
+    path('bank-admin/', include('bank_admin.urls')),
+    path('', include('student_admin.urls')),
+
     # Swagger Documentation
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),

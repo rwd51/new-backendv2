@@ -1,7 +1,8 @@
 from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 
-from students.views import DepositClaimsView, BDTtoUSDView, USDAccountsView
+from students.views import DepositClaimsView, BDTtoUSDView, USDAccountsView, CurrencyConversionView, \
+    BDTUSDConversionView
 from students.viewsets import *
 
 router = DefaultRouter()
@@ -21,7 +22,6 @@ router.register(r'user-address', UserAddressViewSet, basename='user_address')
 
 urlpatterns = [
     path('', include(router.urls)),
-     
 
     path('onboarding/progress/', OnboardingProgressViewSet.as_view(), name='onboarding_progress'),
     path('deposits/', DepositClaimsView.as_view(), name='deposits'),
@@ -30,6 +30,9 @@ urlpatterns = [
     path('conversions/<str:pk>/', BDTtoUSDView.as_view(), name='conversion_detail'),
     path('usd-accounts/', USDAccountsView.as_view(), name='usd_accounts'),
     path('usd-accounts/<str:user_id>/', USDAccountsView.as_view(), name='usd_accounts_detail'),
+    path('convert-currency/', CurrencyConversionView.as_view(), name='convert_currency'),
+    path('bdt-usd-conversion/', BDTUSDConversionView.as_view(), name='bdt_usd_conversion'),
+    path('bdt-usd-conversion/<str:pk>/', BDTUSDConversionView.as_view(), name='bdt_usd_conversion_detail'),
 
     re_path(r'^onboarding/(?P<step>[\w-]+)/$', OnboardingViewSet.as_view(), name='onboarding_step'),
 ]

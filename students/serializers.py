@@ -1,15 +1,15 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
+# from django.contrib.auth import get_user_model
 from students.models import *
 from students.validators import FileValidator
+from students.utility.document_helper import google_bucket_file_url
 
-User = get_user_model()
+# User = get_user_model()
 
 class StudentUserAutoCreateMixin:
     """Mixin to auto-create StudentUser AND update onboarding progress"""
     def get_or_create_student_user(self, user):
         student_user, created = StudentUser.objects.get_or_create(
-            user=user,
             defaults={
                 'first_name': 'Student',
                 'last_name': f'#{user.id}',
@@ -33,7 +33,6 @@ class StudentUserAutoCreateMixin:
 
     def create(self, validated_data):
         user = self.context['request'].user
-        self.get_or_create_student_user(user)
         validated_data['user'] = user
         
         # Auto-update onboarding progress
@@ -59,9 +58,7 @@ class StudentEducationSerializer(StudentUserAutoCreateMixin, serializers.ModelSe
         read_only_fields = ('user', 'created_at', 'updated_at')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)  # Auto-create StudentUser
-        validated_data['user'] = user
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 class StudentJobExperienceSerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
@@ -71,9 +68,7 @@ class StudentJobExperienceSerializer(StudentUserAutoCreateMixin, serializers.Mod
         read_only_fields = ('user', 'created_at', 'updated_at')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)
-        validated_data['user'] = user
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 class StudentPassportSerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
@@ -83,9 +78,7 @@ class StudentPassportSerializer(StudentUserAutoCreateMixin, serializers.ModelSer
         read_only_fields = ('user', 'created_at', 'updated_at')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)
-        validated_data['user'] = user
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 class StudentForeignUniversitySerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
@@ -95,9 +88,7 @@ class StudentForeignUniversitySerializer(StudentUserAutoCreateMixin, serializers
         read_only_fields = ('user', 'created_at', 'updated_at')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)
-        validated_data['user'] = user
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 class StudentFinancialInfoSerializer(StudentUserAutoCreateMixin, serializers.ModelSerializer):
@@ -136,9 +127,7 @@ class StudentFinancerInfoSerializer(StudentUserAutoCreateMixin, serializers.Mode
         read_only_fields = ('user', 'created_at', 'updated_at')
     
     def create(self, validated_data):
-        user = self.context['request'].user
-        self.get_or_create_student_user(user)
-        validated_data['user'] = user
+        validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
 # In students/serializers.py - Replace/Add these serializers
@@ -153,7 +142,7 @@ class StudentFinancerInfoSerializer(StudentUserAutoCreateMixin, serializers.Mode
 
 class StudentUserSerializer(serializers.ModelSerializer):
     """Matches old backend StudentUserSerializer response format"""
-    user = serializers.IntegerField(source='id', read_only=True)
+    # user = serializers.IntegerField(source='id', read_only=True)
     # Add fields that match old backend PriyoMoneyUserSerializer
     university = serializers.SerializerMethodField()
     department = serializers.SerializerMethodField()
@@ -163,27 +152,25 @@ class StudentUserSerializer(serializers.ModelSerializer):
     last_onboarding_step = serializers.SerializerMethodField()
     
     # Basic user info from CustomUser model - FIXED: use proper sources
-    id = serializers.IntegerField(source='student_r.id', read_only=True)
-    first_name = serializers.CharField(source='student_user.first_name', read_only=True)
-    last_name = serializers.CharField(source='student_user.last_name', read_only=True)
-    email = serializers.CharField(source='student_user.email', read_only=True)
-    date_of_birth = serializers.DateField(source='student_user.date_of_birth', read_only=True)
-    gender = serializers.CharField(source='student_user.gender', read_only=True)
-    nationality = serializers.CharField(source='student_user.nationality', read_only=True)
-    is_active = serializers.BooleanField(source='student_user.is_active', read_only=True)
-    is_approved = serializers.BooleanField(source='student_user.is_approved', read_only=True)
-    
-    one_auth_uuid = serializers.CharField(read_only=True)
-    date_joined = serializers.DateTimeField(read_only=True)
+    # id = serializers.IntegerField(source='student_r.id', read_only=True)
+    # first_name = serializers.CharField(source='student_user.first_name', read_only=True)
+    # last_name = serializers.CharField(source='student_user.last_name', read_only=True)
+    # email = serializers.CharField(source='student_user.email', read_only=True)
+    # date_of_birth = serializers.DateField(source='student_user.date_of_birth', read_only=True)
+    # gender = serializers.CharField(source='student_user.gender', read_only=True)
+    # nationality = serializers.CharField(source='student_user.nationality', read_only=True)
+    # is_active = serializers.BooleanField(source='student_user.is_active', read_only=True)
+    # is_approved = serializers.BooleanField(source='student_user.is_approved', read_only=True)
+    #
+    # one_auth_uuid = serializers.CharField(read_only=True)
+    # date_joined = serializers.DateTimeField(read_only=True)
     
     class Meta:
-        model = User  # Changed to User model since that's what the viewset returns
+        model = StudentUser  # Changed to User model since that's what the viewset returns
         fields = [
-            'id','user', 'one_auth_uuid', 'first_name', 'last_name', 'email', 
-            'mobile_number', 'date_of_birth', 'gender', 'nationality',
-            'is_active', 'is_approved', 
-            'university', 'department', 'foreign_university', 'profile_image_icon', 
-            'last_onboarding_step', 'date_joined'
+            'id', 'one_auth_uuid', 'first_name', 'last_name', 'email', 'mobile_number', 'date_of_birth', 'gender',
+            'nationality', 'is_active', 'is_approved', 'university', 'department', 'foreign_university',
+            'profile_image_icon', 'last_onboarding_step', 'date_joined'
         ]
     
     def get_university(self, obj):
@@ -219,17 +206,15 @@ class StudentUserSerializer(serializers.ModelSerializer):
         ).first()
         
         if document and document.uploaded_file_name:
-            from .utility.document_helper import google_bucket_file_url
             return google_bucket_file_url(document.uploaded_file_name)
         return None
     
     def get_mobile_number(self, obj):
         """Return mobile number info - obj is User"""
         try:
-            student_user = obj.student_user
-            if student_user.mobile_number:
+            if obj.mobile_number:
                 return {
-                    'mobile_number': student_user.mobile_number,
+                    'mobile_number': obj.mobile_number,
                     'mobile_number_country_prefix': '+880'  # Default for BD
                 }
         except:
@@ -238,9 +223,7 @@ class StudentUserSerializer(serializers.ModelSerializer):
     
     def get_last_onboarding_step(self, obj):
         """Get last completed onboarding step - obj is User"""
-        finished_steps = obj.student_onboarding_steps.filter(
-            is_completed=True
-        ).values_list('step', flat=True)
+        finished_steps = obj.student_onboarding_steps.filter(is_completed=True).values_list('step', flat=True)
         
         expected_steps = [
             'student_primary_info', 'student_education', 'student_experience',
@@ -280,7 +263,7 @@ class StudentCompleteProfileSerializer(serializers.ModelSerializer):
         model = StudentUser
         fields = [
             # Basic info
-            'id', 'user', 'one_auth_uuid', 'first_name', 'last_name', 'email',
+            'id', 'one_auth_uuid', 'first_name', 'last_name', 'email',
             'mobile_number', 'date_of_birth', 'gender', 'nationality',
             'is_active', 'is_approved', 'approved_by', 'approved_at',
             'created_at', 'updated_at', 'date_joined',
@@ -295,62 +278,62 @@ class StudentCompleteProfileSerializer(serializers.ModelSerializer):
         ]
     
     def get_addresses(self, obj):
-        addresses = obj.user.student_addresses.all()
+        addresses = obj.student_addresses.all()
         return StudentAddressSerializer(addresses, many=True).data
     
     def get_educations(self, obj):
-        educations = obj.user.student_educations.all()
+        educations = obj.student_educations.all()
         return StudentEducationSerializer(educations, many=True).data
     
     def get_experiences(self, obj):
-        experiences = obj.user.student_job_experiences.all()
+        experiences = obj.student_job_experiences.all()
         return StudentJobExperienceSerializer(experiences, many=True).data
     
     def get_universities(self, obj):
-        universities = obj.user.student_foreign_universities.all()
+        universities = obj.student_foreign_universities.all()
         return StudentForeignUniversitySerializer(universities, many=True).data
     
     def get_financial_info(self, obj):
         try:
-            return StudentFinancialInfoSerializer(obj.user.student_financial_info).data
+            return StudentFinancialInfoSerializer(obj.student_financial_info).data
         except:
             return None
     
     def get_financer_info(self, obj):
-        financer_info = obj.user.student_financer_info.all()
+        financer_info = obj.student_financer_info.all()
         return StudentFinancerInfoSerializer(financer_info, many=True).data
     
     def get_passport(self, obj):
         try:
-            return StudentPassportSerializer(obj.user.student_passport).data
+            return StudentPassportSerializer(obj.student_passport).data
         except:
             return None
     
     def get_documents(self, obj):
-        documents = obj.user.student_documents.all()
+        documents = obj.student_documents.all()
         return StudentDocumentSerializer(documents, many=True).data
     
     def get_university(self, obj):
-        education = obj.user.student_educations.order_by('-created_at').first()
+        education = obj.student_educations.order_by('-created_at').first()
         return education.institution_name if education else None
     
     def get_department(self, obj):
-        education = obj.user.student_educations.order_by('-created_at').first()
+        education = obj.student_educations.order_by('-created_at').first()
         return education.field_of_study if education else None
     
     def get_profile_image_icon(self, obj):
-        document = obj.user.student_documents.filter(
+        document = obj.student_documents.filter(
             document_type='student_photograph'
         ).first()
         
         if document and document.uploaded_file_name:
-            from .utility.document_helper import google_bucket_file_url
+
             return google_bucket_file_url(document.uploaded_file_name)
         return None
     
     def get_onboarding_progress(self, obj):
         """Get onboarding progress - matches old backend"""
-        steps = obj.user.student_onboarding_steps.all()
+        steps = obj.student_onboarding_steps.all()
         finished_steps = steps.values_list('step', flat=True)
         
         expected_steps = [
@@ -386,7 +369,6 @@ class StudentDocumentSerializer(serializers.ModelSerializer):
     def get_gcp_url(self, obj):
         """Get GCP URL using same method as old backend"""
         if obj.uploaded_file_name:
-            from .utility.document_helper import google_bucket_file_url
             return google_bucket_file_url(obj.uploaded_file_name)
         return None
     
@@ -452,16 +434,33 @@ class DepositClaimApproveSerializer(serializers.Serializer):
 
 
 class ConversionApproveSerializer(serializers.Serializer):
-    conversion_id = serializers.CharField(required=True, max_length=255)
+    request_status = serializers.ChoiceField(
+        choices=['APPROVED', 'DECLINED'],
+        required=True
+    )
+    admin_id = serializers.IntegerField(required=False)  # Optional, view will auto-set if not provided
 
 
 class ConversionCreateSerializer(serializers.Serializer):
     amount_in_bdt = serializers.DecimalField(max_digits=10, decimal_places=2, required=True)
-    amount_in_cent = serializers.IntegerField(required=True)
+    amount_in_cent = serializers.DecimalField(max_digits=10, decimal_places=2, required=True) # named cent but actually usd
     expense_type = serializers.ChoiceField(
         choices=['LIVING_EXPENSE', 'TUITION_FEE', 'OTHER'], 
         required=True
     )
-    usd_account = serializers.CharField(max_length=255, required=True)
-    conversion_rate = serializers.FloatField(required=True)
+    # CHANGE: usd_account -> account_number to match API
+    bank_charge_in_bdt = serializers.DecimalField(max_digits=10, decimal_places=2)
+    service_charge_in_bdt = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0.00)
+    usd_account = serializers.IntegerField(required=True)
+    bank_conversion_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     expense_document = serializers.FileField(required=True)
+    description = serializers.CharField(max_length=128, required=False)
+    
+    # ADD: Missing fields from API
+    initiated_by = serializers.ChoiceField(
+        choices=['BANK_ADMIN', 'STUDENT'], 
+        required=False,
+        default='BANK_ADMIN'
+    )
+    admin_id = serializers.IntegerField(required=False)
+

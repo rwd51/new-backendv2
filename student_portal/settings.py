@@ -1,12 +1,11 @@
 """
 Django settings for student_portal project.
 """
-
+import os
 from pathlib import Path
-import os
 from dotenv import load_dotenv
-import os
 from datetime import timedelta
+from corsheaders.defaults import default_headers
 
 # Load environment variables from a .env file located at the project root
 load_dotenv(os.path.join(Path(__file__).resolve().parent.parent, ".env"))
@@ -15,7 +14,7 @@ load_dotenv(os.path.join(Path(__file__).resolve().parent.parent, ".env"))
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = os.getenv("SECRET_KEY","django-secret-key")
+SECRET_KEY = os.getenv("SECRET_KEY", "django-secret-key")
 DEBUG = os.getenv("APP_DEBUG", "true").lower() in ("1", "true", "yes")
 
 allowed_hosts = os.getenv("DJANGO_ALLOWED_HOSTS", "")
@@ -26,11 +25,11 @@ else:
 
 if DEBUG:
     ALLOWED_HOSTS.extend([
-        '127.0.0.1', 
-        'localhost', 
+        '127.0.0.1',
+        'localhost',
         '.localhost',
         '0.0.0.0',
-        '*'            
+        '*'
     ])
 
 # Application definition - FIXED: Each app on its own line
@@ -42,26 +41,30 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'rest_framework_simplejwt',  
-    'rest_framework_simplejwt.token_blacklist',  
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',  # FIXED: Separate line
-    'drf_yasg',        # FIXED: Separate line
+    'drf_yasg',  # FIXED: Separate line
     'students',
     'storages',
     'health',
+    'bank_admin',
+    'student_admin',
 ]
 
 AUTH_USER_MODEL = 'students.CustomUser'
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-   ## 'django.middleware.csrf.CsrfViewMiddleware',
+    ## 'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'middlewares.authentication.AuthMiddleware',
 ]
 
 ROOT_URLCONF = 'student_portal.urls'
@@ -103,7 +106,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'student_portal.authentication.JWTAuth',
-        'student_portal.authentication.NoAuth',
+        # 'student_portal.authentication.NoAuth',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -112,14 +115,18 @@ REST_FRAMEWORK = {
     ],
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_THROTTLE_RATES': {
+        'public_bd_bank_list': '30/min',  # allow 30 requests per minute per IP
+    },
 }
 
 # CORS settings
-cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '')
-if cors_origins:
-    CORS_ALLOWED_ORIGINS = cors_origins.split(',')
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ORIGIN_ALLOW_ALL = True
 else:
-    CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
+    CORS_ORIGIN_WHITELIST = os.getenv("CORS_ALLOWED_ORIGINS").split(",")
+    CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS").split(",")
 
 CORS_ALLOW_CREDENTIALS = os.getenv('CORS_ALLOW_CREDENTIALS', 'true').lower() == 'true'
 
@@ -216,7 +223,7 @@ JWT_EXPIRATION_DELTA = int(os.environ.get('JWT_EXPIRATION_DELTA', '86400'))
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # 1 hour
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 1 week
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),  # 1 week
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
@@ -239,7 +246,8 @@ if not AUTH_API_BASE or not AUTH_API_KEY:
 
 PRIYOPAY_API_URL = os.getenv('PRIYOPAY_API_URL')
 PRIYOPAY_API_KEY = os.getenv('PRIYOPAY_API_KEY')
-
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
 
 CACHES = {
     "default": {
@@ -263,8 +271,8 @@ SWAGGER_SETTINGS = {
     },
     'SECURITY_REQUIREMENTS': [],
     'USE_SESSION_AUTH': False,
-    'LOGIN_URL': None,           
-    'LOGOUT_URL': None,          
+    'LOGIN_URL': None,
+    'LOGOUT_URL': None,
     'PERSIST_AUTH': True,
     'REFETCH_SCHEMA_WITH_AUTH': True,
     'REFETCH_SCHEMA_ON_LOGOUT': True,
@@ -281,3 +289,8 @@ SWAGGER_SETTINGS = {
     'SHOW_COMMON_EXTENSIONS': True,
 }
 
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "x-api-key",
+    "device-fingerprint",
+    "device-type"
+]

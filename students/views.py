@@ -1,18 +1,21 @@
 from api_clients.priyopay_client import PriyoPayClient
 from rest_framework.generics import GenericAPIView
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from student_portal.permissions import IsStudentAdmin, IsBankAdmin
+from students.models import StudentUser
 from students.serializers import DepositClaimApproveSerializer, ConversionApproveSerializer, ConversionCreateSerializer
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
-class DepositClaimsView(GenericAPIView):
+class DepositClaimsView(APIView):
     http_method_names = ['get', 'patch']
     permission_classes = [IsBankAdmin | IsStudentAdmin]
 
     def get(self, request, pk=None, *args, **kwargs):
         response, _ = PriyoPayClient().fetch_deposit_claims()
-        
+
         # If pk is provided, return specific deposit
         if pk:
             if response and 'results' in response:
@@ -20,7 +23,7 @@ class DepositClaimsView(GenericAPIView):
                     if str(deposit.get('id')) == str(pk) or str(deposit.get('claim_id')) == str(pk):
                         return Response(deposit, status=status.HTTP_200_OK)
             return Response({'error': 'Deposit not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         # Otherwise return all deposits
         return Response(response, status=status.HTTP_200_OK)
 
@@ -28,7 +31,7 @@ class DepositClaimsView(GenericAPIView):
         claim_id = pk or request.data.get('claim_id')
         if not claim_id:
             return Response({'error': 'claim_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         serializer = DepositClaimApproveSerializer(data={'claim_id': claim_id})
         serializer.is_valid(raise_exception=True)
 
@@ -39,13 +42,19 @@ class DepositClaimsView(GenericAPIView):
         return Response(response, status=status.HTTP_200_OK)
 
 
-class BDTtoUSDView(GenericAPIView):
+class BDTtoUSDView(APIView):
     http_method_names = ['get', 'post', 'patch']
     permission_classes = [IsBankAdmin | IsStudentAdmin]
 
     def get(self, request, pk=None, *args, **kwargs):
-        response, _ = PriyoPayClient().fetch_conversions()
-        
+        query_params = request.query_params.dict()
+        student_id = query_params.get("student_id")
+        custom_param = None
+        if student_id:
+            custom_param = {"student_id": student_id}
+
+        response, _ = PriyoPayClient().fetch_conversions(params=custom_param)
+
         # If pk is provided, return specific conversion
         if pk:
             if response and 'results' in response:
@@ -53,7 +62,7 @@ class BDTtoUSDView(GenericAPIView):
                     if str(conversion.get('id')) == str(pk) or str(conversion.get('conversion_id')) == str(pk):
                         return Response(conversion, status=status.HTTP_200_OK)
             return Response({'error': 'Conversion not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         # Otherwise return all conversions
         return Response(response, status=status.HTTP_200_OK)
 
@@ -66,106 +75,136 @@ class BDTtoUSDView(GenericAPIView):
         conversion_id = pk or request.data.get('conversion_id')
         if not conversion_id:
             return Response({'error': 'conversion_id is required'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        serializer = ConversionApproveSerializer(data={'conversion_id': conversion_id})
+
+        serializer = ConversionApproveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated_data = serializer.validated_data
 
         response, _ = PriyoPayClient().update_conversion(
             conversion_id=conversion_id,
-            payload={'request_status': 'APPROVED'}
+            payload={'request_status': validated_data['request_status'], 'admin_id': request.user.id}
         )
         return Response(response, status=status.HTTP_200_OK)
 
 
-class USDAccountsView(GenericAPIView):
+class USDAccountsView(APIView):
     http_method_names = ['get']
     permission_classes = [IsStudentAdmin | IsBankAdmin]
 
     def get(self, request, user_id=None, *args, **kwargs):
-        # Mock USD account data
-        mock_data = {
-            "count": 1,
-            "next": None,
-            "previous": None,
-            "start_index": 0,
-            "end_index": 0,
-            "results": [
-                {
-                    "id": 991,
-                    "creator": {
-                        "id": 2109,
-                        "first_name": "John",
-                        "middle_name": "",
-                        "last_name": "Smith",
-                        "email_address": "johnsmith123@yopmail.com"
-                    },
-                    "account_details": {
-                        "id": 520,
-                        "profile_type": "PERSON",
-                        "synctera_account_balance": 225.0,
-                        "synctera_available_balance": 225.0,
-                        "pending_amount": 0.0,
-                        "updated_at": "2025-08-16T01:09:39.022626-07:00",
-                        "account": 991,
-                        "hold_balance": 0.0
-                    },
-                    "account_holder_name": "John Smith",
-                    "created_at": "2025-08-13T10:19:02.565889-07:00",
-                    "updated_at": "2025-08-16T01:09:39.017831-07:00",
-                    "account_number": "101056480334541",
-                    "account_type": "CHECKING",
-                    "account_process_type": "USER",
-                    "account_status": "ACTIVE_OR_DISBURSED",
-                    "nickname": "My USD Account",
-                    "synctera_account_id": "415b9d11-d713-42b3-9d8c-6eedcac395a8",
-                    "data": {
-                        "id": "415b9d11-d713-42b3-9d8c-6eedcac395a8",
-                        "status": "ACTIVE_OR_DISBURSED",
-                        "tenant": "pnrqep_yvkkwp",
-                        "balances": [
-                            {
-                                "type": "ACCOUNT_BALANCE",
-                                "balance": 0
-                            },
-                            {
-                                "type": "AVAILABLE_BALANCE",
-                                "balance": 0
-                            }
-                        ],
-                        "currency": "USD",
-                        "nickname": "My USD Account",
-                        "open_date": "2025-08-13",
-                        "is_security": False,
-                        "account_type": "CHECKING",
-                        "bank_routing": "359867415",
-                        "customer_ids": [
-                            "bbe79085-fbdd-4701-8a20-1fe78945b6e1"
-                        ],
-                        "restrictions": {
-                            "is_account_out_of_area": True
-                        },
-                        "access_status": "ACTIVE",
-                        "creation_time": "2025-08-13T17:19:02.302773Z",
-                        "customer_type": "PERSONAL",
-                        "account_number": "101056480334541",
-                        "is_ach_enabled": True,
-                        "is_p2p_enabled": True,
-                        "is_sar_enabled": False,
-                        "bank_account_id": "be190a59-a6ee-4080-aa13-f697c9ab6955",
-                        "is_account_pool": False,
-                        "is_card_enabled": True,
-                        "is_wire_enabled": True,
-                        "is_eft_ca_enabled": False,
-                        "last_updated_time": "2025-08-13T17:19:02.302773Z",
-                        "account_template_id": "c3e41f0a-53b0-4901-9a47-dc252ca8fcb6",
-                        "account_number_masked": "101056*****4541",
-                        "is_synctera_pay_enabled": True,
-                        "is_external_card_enabled": False,
-                        "access_status_last_updated_time": "2025-08-13T17:19:02.332675Z"
-                    },
-                    "profile": 1541
-                }
-            ]
+        """
+        Fetch USD accounts from backend
+        Supports both list view and detail view by user_id
+        """
+        if user_id:
+            # Get specific account by user_id (treating user_id as account_id)
+            response, status_code = PriyoPayClient().fetch_usd_account_by_id(account_id=user_id)
+            return Response(response, status=status_code)
+        else:
+            # Get all accounts with optional query parameters
+            query_params = {}
+
+            # Extract query parameters from request
+            if request.GET.get('account_status'):
+                query_params['account_status'] = request.GET.get('account_status')
+            if request.GET.get('student_id'):
+                query_params['student_id'] = request.GET.get('student_id')
+            if request.GET.get('email_address'):
+                query_params['email_address'] = request.GET.get('email_address')
+            if request.GET.get('one_auth_uuid'):
+                query_params['one_auth_uuid'] = request.GET.get('one_auth_uuid')
+            if request.GET.get('limit'):
+                query_params['limit'] = request.GET.get('limit')
+            if request.GET.get('offset'):
+                query_params['offset'] = request.GET.get('offset')
+
+            response, status_code = PriyoPayClient().fetch_usd_accounts(**query_params)
+            return Response(response, status=status_code)
+
+
+class CurrencyConversionView(APIView):
+    http_method_names = ['post']
+    permission_classes = [IsBankAdmin | IsStudentAdmin]
+
+    def post(self, request, *args, **kwargs):
+        """
+        Convert currency using /convert-currency/ endpoint
+        Expected payload: {
+            "from_currency": "BDT",
+            "to_currency": "USD", 
+            "for_subscription": false,
+            "amount": 1
         }
-        
-        return Response(mock_data, status=status.HTTP_200_OK)
+        """
+        response, status_code = PriyoPayClient().convert_currency(payload=request.data)
+        return Response(response, status=status_code)
+
+
+class BDTUSDConversionView(APIView):
+    http_method_names = ['get', 'post', 'patch']
+    permission_classes = [IsBankAdmin | IsStudentAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # Support file uploads
+
+    def get(self, request, pk=None, *args, **kwargs):
+        """Fetch BDT to USD conversion requests"""
+        response, _ = PriyoPayClient().fetch_bdt_usd_conversions()
+
+        # If pk is provided, return specific conversion
+        if pk:
+            if response and 'results' in response:
+                for conversion in response['results']:
+                    if str(conversion.get('id')) == str(pk):
+                        return Response(conversion, status=status.HTTP_200_OK)
+            return Response({'error': 'Conversion not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Otherwise return all conversions
+        return Response(response, status=status.HTTP_200_OK)
+
+    def post(self, request, *args, **kwargs):
+        """Create BDT to USD conversion request with file upload"""
+        # Validate input data using your existing serializer
+        serializer = ConversionCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Extract validated data
+        data = {}
+        for key, value in serializer.validated_data.items():
+            if key != 'expense_document':
+                data[key] = value
+
+        # Add admin_id from authenticated user if not provided
+        if 'admin_id' not in data:
+            data['admin_id'] = request.user.id
+
+        # Handle file upload
+        files = {}
+        if 'expense_document' in request.FILES:
+            files['expense_document'] = request.FILES['expense_document']
+
+        response, status_code = PriyoPayClient().create_bdt_usd_conversion(
+            data=data,
+            files=files if files else None
+        )
+        return Response(response, status=status_code)
+
+    def patch(self, request, pk=None, *args, **kwargs):
+        """Update BDT to USD conversion request status"""
+        conversion_id = pk or request.data.get('conversion_id')
+        if not conversion_id:
+            return Response(
+                {'error': 'conversion_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Prepare payload
+        payload = {
+            'request_status': request.data.get('request_status'),
+            'admin_id': request.data.get('admin_id', request.user.id)
+        }
+
+        response, status_code = PriyoPayClient().update_bdt_usd_conversion_status(
+            conversion_id=conversion_id,
+            payload=payload
+        )
+        return Response(response, status=status_code)
